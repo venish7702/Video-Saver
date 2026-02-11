@@ -1,15 +1,47 @@
 import express from "express";
 import cors from "cors";
 import { execFile, spawn } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+
 // Pinterest (and others) block requests without browser-like headers
 const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+// Optional: Instagram cookies file path (set at startup from INSTAGRAM_COOKIES_BASE64 or INSTAGRAM_COOKIES_FILE)
+let INSTAGRAM_COOKIES_PATH = null;
+function initInstagramCookies() {
+  const filePath = process.env.INSTAGRAM_COOKIES_FILE;
+  if (filePath && existsSync(filePath)) {
+    INSTAGRAM_COOKIES_PATH = filePath;
+    console.log("Instagram: using cookies file from INSTAGRAM_COOKIES_FILE");
+    return;
+  }
+  const b64 = process.env.INSTAGRAM_COOKIES_BASE64;
+  if (b64) {
+    try {
+      const path = join(tmpdir(), "instagram_cookies.txt");
+      const content = Buffer.from(b64, "base64").toString("utf8");
+      writeFileSync(path, content, "utf8");
+      INSTAGRAM_COOKIES_PATH = path;
+      console.log("Instagram: using cookies from INSTAGRAM_COOKIES_BASE64");
+    } catch (e) {
+      console.error("Instagram: failed to write cookies file:", e.message);
+    }
+  }
+}
+initInstagramCookies();
 
 function isPinterestUrl(url) {
   return url && (url.includes("pinterest.com") || url.includes("pin.it"));
 }
 
-function ytDlpExtraHeaders(url) {
+function isInstagramUrl(url) {
+  return url && (url.includes("instagram.com") || url.includes("instagr.am"));
+}
+
+/** Returns extra args for yt-dlp (headers + optional cookies for Instagram/Pinterest). */
+function getYtDlpExtraArgs(url) {
   const args = ["--add-header", `User-Agent:${BROWSER_UA}`];
   if (isPinterestUrl(url)) {
     args.push(
@@ -22,18 +54,24 @@ function ytDlpExtraHeaders(url) {
       "--add-header", "Sec-Fetch-User: ?1",
       "--add-header", "Upgrade-Insecure-Requests: 1"
     );
-    // Optional: use browser cookies (set PINTEREST_COOKIES_BROWSER=safari if logged into Pinterest)
     const cookiesBrowser = process.env.PINTEREST_COOKIES_BROWSER;
-    if (cookiesBrowser) {
-      args.push("--cookies-from-browser", cookiesBrowser);
-    }
+    if (cookiesBrowser) args.push("--cookies-from-browser", cookiesBrowser);
+  }
+  if (isInstagramUrl(url) && INSTAGRAM_COOKIES_PATH) {
+    args.push("--cookies", INSTAGRAM_COOKIES_PATH);
   }
   return args;
 }
 
-const PINTEREST_ERROR_MSG = "Pinterest is blocking automated downloads. Try Instagram or Facebook links, or run: brew upgrade yt-dlp";
+// Legacy name for call sites that still use ytDlpExtraHeaders
+function ytDlpExtraHeaders(url) {
+  return getYtDlpExtraArgs(url);
+}
 
-/** Resolve pin.it and other short URLs to final URL so yt-dlp gets the full Pinterest URL. */
+const PINTEREST_ERROR_MSG = "Pinterest is blocking automated downloads. Try Instagram or Facebook links, or run: brew upgrade yt-dlp";
+const INSTAGRAM_BLOCK_MSG = "Instagram is limiting downloads right now. Try again in a few hours or use a Facebook or Pinterest link.";
+
+/** Resolve pin.it and other short URLs. */
 async function resolveShortUrl(url) {
   if (!url || !url.startsWith("http")) return url;
   try {
@@ -193,18 +231,19 @@ app.post("/analyze", async (req, res) => {
 
   const extra = ytDlpExtraHeaders(urlToUse);
 
+  // Slight delay to reduce Instagram rate limiting (fast repeated requests from same IP get blocked)
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+
   execFile(
     YT_DLP_PATH,
     ["-J", "--no-playlist", ...extra, urlToUse],
     { maxBuffer: 1024 * 1024 * 20, timeout: 60000 },
     (error, stdout, stderr) => {
       if (error) {
-        const stderrStr = (stderr || "").trim().slice(0, 200);
         console.error("yt-dlp error:", error.message, stderr?.slice(0, 400));
-        const msg = isPinterestUrl(urlToUse)
-          ? PINTEREST_ERROR_MSG
-          : (stderrStr ? `Failed to analyze URL: ${stderrStr}` : "Failed to analyze URL. Check that the link is public and try again.");
-        return res.status(500).json({ error: msg });
+        return res.status(422).json({
+          error: "Instagram blocked this request. Try again later."
+        });
       }
 
       try {
