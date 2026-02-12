@@ -52,6 +52,23 @@ Node.js server that analyzes video URLs (Instagram, Facebook, Pinterest, LinkedI
 | **YT_DLP_PATH** | auto (Homebrew paths) | Full path to `yt-dlp` if it’s not on PATH. |
 | **BASE_URL** | from request | Override base URL for download links (e.g. `http://YOUR_IP:3000` on device). Usually not needed; the server uses the request host. |
 | **PINTEREST_COOKIES_BROWSER** | — | If set (e.g. `safari` or `chrome`), yt-dlp uses that browser’s cookies for Pinterest. Only use on your own machine. |
+| **INSTAGRAM_COOKIES_BASE64** | — | Base64-encoded Netscape cookies file. When set, Instagram requests use these cookies so downloads don’t fail with “login required”. See below. |
+| **INSTAGRAM_COOKIES_FILE** | — | Path to a cookies file (Netscape format) for Instagram. Use this instead of INSTAGRAM_COOKIES_BASE64 if you have a file on disk. |
+| **INSTAGRAM_COOKIES_BROWSER** | — | When set (e.g. `chrome`), yt-dlp uses that browser’s cookies for Instagram. Use for local dev when you’re logged into Instagram in that browser. Overrides file/base64 when set. |
+| **FACEBOOK_COOKIES_FILE** | — | Path to a Netscape-format cookies file for Facebook. Can help when Facebook returns “login” or “Cannot parse data”. |
+| **FACEBOOK_COOKIES_BROWSER** | — | Browser name (e.g. `chrome`) so yt-dlp uses that browser’s cookies for Facebook. Use only on your own machine. |
+| **RATE_LIMIT_PER_MINUTE** | `18` | Max analyze requests per IP per minute. Helps protect the server and avoid platform rate blocks when you have many users. |
+
+**Instagram cookies (to avoid “login required”):**  
+If Instagram links fail with “login required” or “rate-limit”, you can pass cookies from a logged-in session:
+
+1. Log into Instagram in a browser (Chrome/Safari).
+2. Export cookies in **Netscape** format (browser extension: “Get cookies.txt” or “cookies.txt”).
+3. Base64-encode the file:  
+   `base64 -i cookies.txt | tr -d '\n' > cookies_b64.txt`  
+   (or use an online base64 encoder and paste the result.)
+4. Set **INSTAGRAM_COOKIES_BASE64** to that string (e.g. in Railway: Variables → add INSTAGRAM_COOKIES_BASE64, paste the long string).  
+   Cookies expire; refresh every few days or when Instagram starts failing again.
 
 Examples:
 
@@ -128,6 +145,24 @@ For App Store, the app must talk to a **hosted** backend (users don’t run the 
 
 5. **Then**  
    Archive and submit to App Store Connect. Backend stays running on Railway (or your host); monitor usage and costs.
+
+---
+
+## Troubleshooting (yt-dlp errors)
+
+**“Cannot parse data” / “Unsupported URL” / “login required”** — These come from yt-dlp when a site blocks or changes. The app still shows a generic “This link could not be loaded.”
+
+| Issue | What to do |
+|-------|------------|
+| **Instagram:** “login required” or “rate-limit” | Refresh cookies: export new Netscape cookies from a logged-in browser, base64 them, and set **INSTAGRAM_COOKIES_BASE64** again (or use **INSTAGRAM_COOKIES_BROWSER** when running locally). Cookies expire every few days. |
+| **Facebook:** “Cannot parse data” or redirect to login | Facebook’s extractor breaks often. Try: (1) Update yt-dlp: `yt-dlp -U` or `brew upgrade yt-dlp`. (2) Optional: set **FACEBOOK_COOKIES_FILE** (path to Netscape cookies) or **FACEBOOK_COOKIES_BROWSER** (e.g. `chrome`) when running on your own machine. |
+| **Any site:** “Confirm you are on the latest version” | Update yt-dlp: `yt-dlp -U` (or `brew upgrade yt-dlp` on Mac). On Railway, redeploy so the Docker image pulls the latest yt-dlp. |
+
+**Keeping the app running long-term**
+
+- **Instagram** often blocks server/datacenter IPs (e.g. Railway). Even with valid cookies, requests from hosted backends can fail. For best Instagram support: (1) Refresh **INSTAGRAM_COOKIES_BASE64** every few days from a logged-in browser (Netscape format, then base64). (2) Or run the backend **locally** and set **INSTAGRAM_COOKIES_BROWSER** (e.g. `chrome`) so yt-dlp uses your browser’s live session.
+- **Pinterest** and **direct/video links** usually work from Railway. The app shows a generic error when a link fails so users can keep using it for other sites.
+- **Redeploy** periodically so the Docker image gets the latest yt-dlp (`yt-dlp -U` is applied on each new deploy from the Dockerfile).
 
 ---
 

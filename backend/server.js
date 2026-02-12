@@ -40,7 +40,11 @@ function isInstagramUrl(url) {
   return url && (url.includes("instagram.com") || url.includes("instagr.am"));
 }
 
-/** Returns extra args for yt-dlp (headers + optional cookies for Instagram/Pinterest). */
+function isFacebookUrl(url) {
+  return url && (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("fb.com"));
+}
+
+/** Returns extra args for yt-dlp (headers + optional cookies for Instagram/Pinterest/Facebook). */
 function getYtDlpExtraArgs(url) {
   const args = ["--add-header", `User-Agent:${BROWSER_UA}`];
   if (isPinterestUrl(url)) {
@@ -57,8 +61,27 @@ function getYtDlpExtraArgs(url) {
     const cookiesBrowser = process.env.PINTEREST_COOKIES_BROWSER;
     if (cookiesBrowser) args.push("--cookies-from-browser", cookiesBrowser);
   }
-  if (isInstagramUrl(url) && INSTAGRAM_COOKIES_PATH) {
-    args.push("--cookies", INSTAGRAM_COOKIES_PATH);
+  if (isInstagramUrl(url)) {
+    args.push(
+      "--add-header", "Referer: https://www.instagram.com/",
+      "--add-header", "Accept: */*",
+      "--add-header", "Accept-Language: en-US,en;q=0.9",
+      "--add-header", "Origin: https://www.instagram.com",
+      "--add-header", "Sec-Fetch-Dest: empty",
+      "--add-header", "Sec-Fetch-Mode: cors"
+    );
+    const igBrowser = process.env.INSTAGRAM_COOKIES_BROWSER;
+    if (igBrowser) {
+      args.push("--cookies-from-browser", igBrowser);
+    } else if (INSTAGRAM_COOKIES_PATH) {
+      args.push("--cookies", INSTAGRAM_COOKIES_PATH);
+    }
+  }
+  if (isFacebookUrl(url)) {
+    const fbFile = process.env.FACEBOOK_COOKIES_FILE;
+    const fbBrowser = process.env.FACEBOOK_COOKIES_BROWSER;
+    if (fbFile && existsSync(fbFile)) args.push("--cookies", fbFile);
+    else if (fbBrowser) args.push("--cookies-from-browser", fbBrowser);
   }
   return args;
 }
@@ -68,8 +91,29 @@ function ytDlpExtraHeaders(url) {
   return getYtDlpExtraArgs(url);
 }
 
-const PINTEREST_ERROR_MSG = "Pinterest is blocking automated downloads. Try Instagram or Facebook links, or run: brew upgrade yt-dlp";
-const INSTAGRAM_BLOCK_MSG = "Instagram is limiting downloads right now. Try again in a few hours or use a Facebook or Pinterest link.";
+const GENERIC_BLOCK_MSG = "Please try again later.";
+
+// Rate limit: max requests per window per IP (so many users don't overload or get blocked by platforms)
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_PER_MINUTE || "18", 10) || 18;
+const rateLimitMap = new Map(); // IP -> [ timestamps ]
+
+function getClientIp(req) {
+  const forwarded = req.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  let times = rateLimitMap.get(ip) || [];
+  times = times.filter((t) => t > cutoff);
+  if (times.length >= RATE_LIMIT_MAX_REQUESTS) return false;
+  times.push(now);
+  rateLimitMap.set(ip, times);
+  return true;
+}
 
 /** Resolve pin.it and other short URLs. */
 async function resolveShortUrl(url) {
@@ -166,7 +210,7 @@ app.get("/download", (req, res) => {
         if (!isMp4FirstBytes(head)) {
         console.error("Download stream is not MP4 (Pinterest/HTML?). First bytes:", head.slice(0, 64));
         try { child.kill("SIGKILL"); } catch (_) {}
-        const errMsg = isPinterestUrl(decodedUrl) ? PINTEREST_ERROR_MSG : "Video unavailable. Try again or use a different link.";
+        const errMsg = GENERIC_BLOCK_MSG;
         if (!res.headersSent) res.status(500).json({ error: errMsg });
         return;
       }
@@ -181,24 +225,23 @@ app.get("/download", (req, res) => {
       if (head && head.length > 0) res.write(head);
       res.end();
     } else if (!res.headersSent) {
-      res.status(500).json({ error: "No video data received" });
+      res.status(500).json({ error: GENERIC_BLOCK_MSG });
     }
   });
   child.stdout.on("error", (err) => {
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: GENERIC_BLOCK_MSG });
   });
 
   child.stderr.on("data", (d) => console.error("yt-dlp download stderr:", d?.slice(0, 400)));
   child.on("error", (err) => {
     clearTimeout(timeout);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: GENERIC_BLOCK_MSG });
     else res.end();
   });
   child.on("close", (code, signal) => {
     clearTimeout(timeout);
     if (code !== 0 && !res.headersSent) {
-      const errMsg = isPinterestUrl(decodedUrl) ? PINTEREST_ERROR_MSG : "Download failed (yt-dlp exited " + code + ")";
-      res.status(500).json({ error: errMsg });
+      res.status(500).json({ error: GENERIC_BLOCK_MSG });
     }
   });
   res.on("close", () => {
@@ -219,7 +262,14 @@ app.post("/analyze", async (req, res) => {
   const trimmed = url.trim();
   if (!trimmed) {
     return res.status(400).json({
-      error: "Please paste a valid video URL (Instagram, Facebook, Pinterest, or LinkedIn)."
+      error: "Please paste a valid video URL."
+    });
+  }
+
+  const clientIp = getClientIp(req);
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({
+      error: "Too many requests. Please try again in a minute."
     });
   }
 
@@ -231,8 +281,9 @@ app.post("/analyze", async (req, res) => {
 
   const extra = ytDlpExtraHeaders(urlToUse);
 
-  // Slight delay to reduce Instagram rate limiting (fast repeated requests from same IP get blocked)
-  await new Promise((resolve) => setTimeout(resolve, 1200));
+  // Delay before yt-dlp to reduce rate limiting (Instagram in particular blocks fast repeated requests)
+  const delayMs = isInstagramUrl(urlToUse) ? 2800 : 1200;
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 
   execFile(
     YT_DLP_PATH,
@@ -242,7 +293,7 @@ app.post("/analyze", async (req, res) => {
       if (error) {
         console.error("yt-dlp error:", error.message, stderr?.slice(0, 400));
         return res.status(422).json({
-          error: "Instagram blocked this request. Try again later."
+          error: GENERIC_BLOCK_MSG
         });
       }
 
@@ -263,8 +314,7 @@ app.post("/analyze", async (req, res) => {
           format = rawFormats.find(f => f.url && (f.vcodec !== "none" || f.acodec !== "none"));
         }
         if (!format) {
-          const msg = isPinterestUrl(urlToUse) ? PINTEREST_ERROR_MSG : "No playable format found";
-          return res.status(422).json({ error: msg });
+          return res.status(422).json({ error: GENERIC_BLOCK_MSG });
         }
 
         // When we have a direct MP4 URL, return it so the app downloads directly (works for Instagram + Pinterest).
@@ -295,7 +345,7 @@ app.post("/analyze", async (req, res) => {
       } catch (parseError) {
         console.error("Parse error:", parseError);
         return res.status(500).json({
-          error: "Failed to process video data"
+          error: GENERIC_BLOCK_MSG
         });
       }
     }
@@ -312,5 +362,14 @@ app.listen(PORT, () => {
   console.log("yt-dlp path:", YT_DLP_PATH);
   if (process.env.PINTEREST_COOKIES_BROWSER) {
     console.log("Pinterest: using cookies from browser:", process.env.PINTEREST_COOKIES_BROWSER);
+  }
+  if (process.env.INSTAGRAM_COOKIES_BROWSER) {
+    console.log("Instagram: using cookies from browser:", process.env.INSTAGRAM_COOKIES_BROWSER);
+  }
+  if (process.env.FACEBOOK_COOKIES_BROWSER) {
+    console.log("Facebook: using cookies from browser:", process.env.FACEBOOK_COOKIES_BROWSER);
+  }
+  if (process.env.FACEBOOK_COOKIES_FILE && existsSync(process.env.FACEBOOK_COOKIES_FILE)) {
+    console.log("Facebook: using cookies file:", process.env.FACEBOOK_COOKIES_FILE);
   }
 });

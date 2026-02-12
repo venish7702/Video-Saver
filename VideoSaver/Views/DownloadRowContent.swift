@@ -11,6 +11,8 @@ import AVKit
 struct DownloadRowContent: View {
     let item: MediaItem
 
+    private let rowHeight: CGFloat = 76
+
     var body: some View {
         HStack(spacing: 12) {
             thumbnailView
@@ -18,15 +20,19 @@ struct DownloadRowContent: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(.headline)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
 
                 Text(statusSubtitle)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 8)
+        .frame(height: rowHeight)
+        .padding(.vertical, 6)
     }
 
     @ViewBuilder

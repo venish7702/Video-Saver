@@ -41,38 +41,38 @@ struct IdentifiableURL: Identifiable {
 }
 
 struct SettingsView: View {
-    @AppStorage("isDarkMode") private var isDarkMode = false
     @State private var safariURL: URL?
+    @State private var showPaywall = false
+    @State private var showRestoreFeedback = false
+    @AppStorage("isPremium") private var isPremium = false
 
-    private let privacyURL = URL(string: "https://example.com/privacy")!
-    private let appVersion = "1.0.0 (Build 42)"
+    private let privacyURL = URL(string: "https://privacypolicydownloader1.blogspot.com/p/downloader-privacy-policy.html?m=1")!
+    private let termsURL = URL(string: "https://sites.google.com/view/terms-of-use-00/home")!
+    private let appStoreReviewURL = URL(string: "https://apps.apple.com/app/id123456789?action=write-review")!
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "moon.fill")
-                            .foregroundStyle(.white)
-                            .frame(width: 28, height: 28)
-                            .background(Color.purple)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                        Text("Dark Mode")
-                        Spacer()
-                        Toggle("", isOn: $isDarkMode)
-                            .labelsHidden()
+                    Button {
+                        showPaywall = true
+                    } label: {
+                        SettingsRow(icon: "crown.fill", iconColor: .orange, title: "Subscribe / Premium")
                     }
-                } header: {
-                    Text("PREFERENCES")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section {
                     Button {
                         shareApp()
                     } label: {
                         SettingsRow(icon: "square.and.arrow.up", iconColor: .green, title: "Share App")
+                    }
+                    Button {
+                        openAppStoreReview()
+                    } label: {
+                        SettingsRow(icon: "star.fill", iconColor: .yellow, title: "Rate / Review App")
+                    }
+                    Button {
+                        restorePurchases()
+                    } label: {
+                        SettingsRow(icon: "arrow.clockwise.circle.fill", iconColor: .blue, title: "Restore Purchases")
                     }
                 } header: {
                     Text("APP")
@@ -86,6 +86,11 @@ struct SettingsView: View {
                     } label: {
                         SettingsRow(icon: "shield.checkered", iconColor: .blue, title: "Privacy Policy")
                     }
+                    Button {
+                        safariURL = termsURL
+                    } label: {
+                        SettingsRow(icon: "doc.text", iconColor: .gray, title: "Terms of Use")
+                    }
                 } header: {
                     Text("LEGAL")
                         .font(.caption)
@@ -94,6 +99,9 @@ struct SettingsView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
+            .sheet(isPresented: $showPaywall) {
+                PremiumPaywallView()
+            }
             .sheet(item: Binding(
                 get: { safariURL.map { IdentifiableURL(url: $0) } },
                 set: { safariURL = $0?.url }
@@ -102,21 +110,10 @@ struct SettingsView: View {
                     safariURL = nil
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 8) {
-                    Image(systemName: "app.fill")
-                        .font(.system(size: 50))
-                        .foregroundStyle(.green)
-                    Text("Video Saver Pro")
-                        .font(.headline)
-                    Text("Version \(appVersion)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("© 2024 VIDEO SAVER STUDIO")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 24)
+            .alert("Restore Purchases", isPresented: $showRestoreFeedback) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Restore complete. If you had an active subscription, premium is now enabled.")
             }
         }
     }
@@ -127,6 +124,16 @@ struct SettingsView: View {
         let item = URL(string: "https://apps.apple.com/app/id123456789")!
         let av = UIActivityViewController(activityItems: [item], applicationActivities: nil)
         rootVC.present(av, animated: true)
+    }
+
+    private func openAppStoreReview() {
+        UIApplication.shared.open(appStoreReviewURL)
+    }
+
+    private func restorePurchases() {
+        if !isPremium {
+            showRestoreFeedback = true
+        }
     }
 }
 

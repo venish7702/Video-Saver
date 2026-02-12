@@ -114,6 +114,7 @@ struct DownloadsView: View {
                                 }
                                 .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
                                 .listRowSeparator(.hidden)
+                                .frame(minHeight: 96)
                                 .listRowBackground(
                                     RoundedRectangle(cornerRadius: 16)
                                         .fill(Color.white)
@@ -132,6 +133,9 @@ struct DownloadsView: View {
                         .listStyle(.plain)
                         .listRowSpacing(12)
                         .scrollContentBackground(.hidden)
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            Color.clear.frame(height: 24)
+                        }
                     }
                 }
             }

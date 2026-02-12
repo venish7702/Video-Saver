@@ -22,6 +22,8 @@
 		B10000000000000000000003 /* LinkParserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* LinkParserService.swift */; };
 		B10000000000000000000004 /* PhotoLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* PhotoLibraryService.swift */; };
 		B10000000000000000000005 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* AppViewModel.swift */; };
+		C10000000000000000000001 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* PaywallView.swift */; };
+		C10000000000000000000002 /* PremiumPaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* PremiumPaywallView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -41,6 +43,8 @@
 		B20000000000000000000003 /* LinkParserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkParserService.swift; sourceTree = "<group>"; };
 		B20000000000000000000004 /* PhotoLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryService.swift; sourceTree = "<group>"; };
 		B20000000000000000000005 /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
+		C20000000000000000000001 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		C20000000000000000000002 /* PremiumPaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumPaywallView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,6 +115,8 @@
 				B20000000000000000000006 /* DownloadRowContent.swift */,
 				A20000000000000000000006 /* PreviewView.swift */,
 				A20000000000000000000007 /* DownloadsView.swift */,
+				C20000000000000000000001 /* PaywallView.swift */,
+				C20000000000000000000002 /* PremiumPaywallView.swift */,
 				A20000000000000000000008 /* SettingsView.swift */,
 			);
 			path = Views;
@@ -207,6 +213,8 @@
 				B10000000000000000000003 /* LinkParserService.swift in Sources */,
 				B10000000000000000000004 /* PhotoLibraryService.swift in Sources */,
 				B10000000000000000000005 /* AppViewModel.swift in Sources */,
+				C10000000000000000000001 /* PaywallView.swift in Sources */,
+				C10000000000000000000002 /* PremiumPaywallView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

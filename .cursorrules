@@ -1,0 +1,23 @@
+# Magic TIFF: iOS 26 Development Standards
+
+## Rule 1: Visual Identity & Components
+- **Framework:** Use SwiftUI 6+ exclusively. No UIKit unless explicitly requested.
+- **Aesthetic:** Adhere to 'Liquid Glass' standards. Use `.ultraThinMaterial`, high corner radii (30pt+), and SF Symbols 7.
+- **Hierarchy:** Prioritize large navigation titles and clear depth using `ZStack` and glass shadows.
+
+## Rule 2: Architecture & Clean Code
+- **Structure:** Enforce a strict folder hierarchy: 
+  - `Views/`: Pure UI components.
+  - `Models/`: Data structures (TIFF/PDF metadata).
+  - `ViewModels/`: Logic and State management.
+  - `Resources/`: Assets and SF Symbol constants.
+- **Patterns:** Use `Observable` macro for state. Avoid old `@Published` patterns.
+
+## Rule 3: Thumb-Zone & UX
+- **Interactions:** All primary CTAs (like the '+' button) must stay in the bottom 30% of the screen.
+- **Safety:** Respect all `Safe Area` insets, especially for floating glass elements.
+- **Accessibility:** Mandatory `accessibilityLabel` for every icon. Support Dynamic Type scaling.
+
+## Rule 4: Performance & Safety
+- **Concurrency:** Use `async/await` and `Actors` for TIFF processing to keep the UI thread 100% fluid.
+- **Memory:** Use `LazyVStack` for the document list to handle libraries with 1000+ items.

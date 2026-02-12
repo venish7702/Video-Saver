@@ -9,6 +9,9 @@ import Foundation
 
 enum AppConfig {
     /// Production backend URL. Used when BACKEND_URL is not set (e.g. App Store build).
-    /// Before App Store: replace with your deployed backend URL (e.g. Railway).
-    static let productionBackendURL = "https://your-backend.up.railway.app"
+    static let productionBackendURL = "https://video-saver-production.up.railway.app"
+
+    /// Optional fallback when production URL fails (e.g. on mobile data if carrier blocks *.railway.app).
+    /// Add a custom domain in Railway (Settings → Networking → Custom Domain), then set it here (e.g. "https://api.yourdomain.com").
+    static let fallbackBackendURL: String? = "https://video-saver.videosaverapp.site"
 }

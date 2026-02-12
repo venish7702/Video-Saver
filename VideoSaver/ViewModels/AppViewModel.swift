@@ -2,7 +2,7 @@
 //  AppViewModel.swift
 //  VideoSaver
 //
-//  Validates video URL (Instagram, Facebook, Pinterest, LinkedIn); calls backend /analyze.
+//  Validates video URL; calls backend /analyze for supported web video links.
 //
 
 import Foundation
@@ -34,10 +34,10 @@ final class AppViewModel: ObservableObject {
             trimmed = "https://" + trimmed
         }
 
-        // Accept any valid URL; backend will check allowed sites (Instagram, Facebook, Pinterest, LinkedIn)
+        // Accept any valid URL; backend validates and returns playable format
         guard let parsed = URL(string: trimmed),
               let host = parsed.host, !host.isEmpty, host.contains(".") else {
-            flowState = .failure("Please paste a valid video URL (Instagram, Facebook, Pinterest, or LinkedIn).")
+            flowState = .failure("Please paste a valid video URL.")
             return
         }
 

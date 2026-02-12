@@ -2,7 +2,7 @@
 //  HomeView.swift
 //  VideoSaver
 //
-//  Screen 1 – Fetch: paste video URL (Instagram, Facebook, Pinterest, LinkedIn), tap Fetch Video.
+//  Screen 1 – Fetch: paste video URL, tap Fetch Video. Generic web video links only.
 //
 
 import SwiftUI
@@ -13,6 +13,7 @@ struct FetchView: View {
     @State private var showEmptyError = false
     @State private var showErrorAlert = false
     @State private var pendingQualityItem: MediaItem?
+    @State private var showPaywall = false
 
     private var isAnalyzing: Bool {
         if case .analyzing = appViewModel.flowState { return true }
@@ -20,7 +21,7 @@ struct FetchView: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             LinearGradient(
                 colors: [
                     Color.blue.opacity(0.15),
@@ -55,13 +56,19 @@ struct FetchView: View {
                         .font(.system(size: 28, weight: .bold))
                         .multilineTextAlignment(.center)
 
-                    Text("Download Instagram reels quickly and securely.")
+                    Text("Download videos quickly and securely.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
 
-                    TextField("Please enter URL link here", text: $urlInput)
+                    Text("Only save content you own or have permission to use.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+
+                    TextField("Paste video link", text: $urlInput)
                         .textContentType(.URL)
                         .keyboardType(.URL)
                         .autocapitalization(.none)
@@ -140,6 +147,10 @@ struct FetchView: View {
                 }
                 .padding(32)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
 
             if isAnalyzing {
                 ZStack {
@@ -160,6 +171,26 @@ struct FetchView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 20))
                 }
             }
+
+            Button {
+                showPaywall = true
+            } label: {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.yellow, .orange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 44, height: 44)
+            }
+            .padding(.top, 12)
+            .padding(.trailing, 16)
+        }
+        .sheet(isPresented: $showPaywall) {
+            PremiumPaywallView()
         }
         .onChange(of: appViewModel.flowState) { newState in
             if case .qualitySelection(let item) = newState {
@@ -195,11 +226,15 @@ struct FetchView: View {
     }
 }
 
-// MARK: - Quality selection (UI only; actual quality is one from backend)
+// MARK: - Quality selection (1080p requires premium)
 struct QualitySelectionSheet: View {
     let item: MediaItem
     let onSelect: () -> Void
     let onCancel: () -> Void
+
+    @AppStorage("isPremium") private var isPremium = false
+    @State private var showPaywall = false
+    @State private var pending1080p = false
 
     var body: some View {
         NavigationStack {
@@ -210,9 +245,16 @@ struct QualitySelectionSheet: View {
                     .padding(.top, 8)
 
                 VStack(spacing: 12) {
-                    qualityButton(label: "1080p", subtitle: "Full HD") { onSelect() }
-                    qualityButton(label: "720p", subtitle: "HD") { onSelect() }
-                    qualityButton(label: "480p", subtitle: "SD") { onSelect() }
+                    qualityButton(label: "1080p", subtitle: "Full HD", isPremiumOnly: true) {
+                        if isPremium {
+                            onSelect()
+                        } else {
+                            pending1080p = true
+                            showPaywall = true
+                        }
+                    }
+                    qualityButton(label: "720p", subtitle: "HD", isPremiumOnly: false) { onSelect() }
+                    qualityButton(label: "480p", subtitle: "SD", isPremiumOnly: false) { onSelect() }
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 8)
@@ -228,23 +270,53 @@ struct QualitySelectionSheet: View {
                     Button("Cancel") { onCancel() }
                 }
             }
+            .sheet(isPresented: $showPaywall) {
+                PremiumPaywallView()
+            }
+            .onChange(of: showPaywall) { isVisible in
+                if !isVisible && pending1080p {
+                    if isPremium {
+                        onSelect()
+                    }
+                    pending1080p = false
+                }
+            }
         }
     }
 
-    private func qualityButton(label: String, subtitle: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func qualityButton(label: String, subtitle: String, isPremiumOnly: Bool, action: @escaping () -> Void) -> some View {
+        let isLocked = isPremiumOnly && !isPremium
+        let showPremiumBadge = isPremiumOnly
+        return Button(action: action) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label)
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                    HStack(spacing: 8) {
+                        Text(label)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        if showPremiumBadge {
+                            Text("Premium")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.orange)
+                                .clipShape(Capsule())
+                        }
+                    }
                     Text(subtitle)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
-                Image(systemName: "checkmark.circle")
-                    .foregroundStyle(.blue)
+                if isPremiumOnly {
+                    Image(systemName: isLocked ? "lock.fill" : "crown.fill")
+                        .font(.title3)
+                        .foregroundStyle(isLocked ? .orange : .yellow)
+                } else {
+                    Image(systemName: "checkmark.circle")
+                        .foregroundStyle(.blue)
+                }
             }
             .padding()
             .frame(maxWidth: .infinity)

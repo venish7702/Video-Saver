@@ -49,6 +49,9 @@ struct ContentView: View {
                 .tag(Tab.settings)
         }
         .tint(.blue)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: 34)
+        }
     }
 }
 
